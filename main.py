@@ -326,8 +326,9 @@ def train_one_epoch(model, loader, optimizer, criterion, device):
 
 
 @torch.no_grad()
-def evaluate(model, loader, criterion, device):
+def evaluate(model, loader, criterion, device, num_classes: int):
     model.eval()
+    cm = torch.zeros(num_classes, num_classes, dtype=torch.int64)
     total_loss, top1, top5, total = 0.0, 0, 0, 0
     for inputs, y in tqdm(loader, desc="val", leave=False):
         inputs = _to_device(inputs, device)
@@ -335,12 +336,19 @@ def evaluate(model, loader, criterion, device):
         logits = model(*inputs)
         loss = criterion(logits, y)
 
+        preds = logits.argmax(1)
+        # Accumulation vectorisée de la matrice de confusion (sur CPU).
+        flat_idx = (y * num_classes + preds).cpu()
+        cm.view(-1).index_add_(
+            0, flat_idx, torch.ones(flat_idx.numel(), dtype=torch.int64)
+        )
+
         bs = y.size(0)
         total_loss += loss.item() * bs
-        top1 += (logits.argmax(1) == y).sum().item()
+        top1 += (preds == y).sum().item()
         top5 += topk_correct(logits, y, 5)
         total += bs
-    return total_loss / total, top1 / total, top5 / total
+    return total_loss / total, top1 / total, top5 / total, cm.tolist()
 
 
 # ------------------------------ Main ------------------------------
@@ -400,7 +408,31 @@ def main():
     run_dir = make_run_dir(Path(args.save_dir), args.model)
     ckpt_path = run_dir / "best.pth"
     history_path = run_dir / "history.csv"
+    cm_dir = run_dir / "confusion_matrices"
+    cm_dir.mkdir(exist_ok=True)
+    best_cm_path = run_dir / "confusion_best.png"
     print(f"Run dir: {run_dir}")
+
+    # Pour le rendu des matrices de confusion par epoch. Si matplotlib / les
+    # noms de classes ne sont pas dispos, on tombe en silence sur les indices
+    # numériques et on ne plante pas l'entraînement.
+    try:
+        from report_run import plot_confusion, get_class_names
+        class_names = get_class_names(
+            frames_root=Path("frames"), archives_root=Path(args.archives)
+        )
+    except Exception as e:
+        print(f"(plot CM désactivé : {type(e).__name__}: {e})")
+        plot_confusion = None
+        class_names = None
+
+    def save_confusion(cm, out_path, title):
+        if plot_confusion is None:
+            return
+        try:
+            plot_confusion(cm, out_path, class_names, title=title)
+        except Exception as e:
+            print(f"(plot CM échoué pour {out_path.name}: {type(e).__name__}: {e})")
 
     config = {
         "args": vars(args),
@@ -434,10 +466,19 @@ def main():
     for epoch in range(1, args.epochs + 1):
         epoch_t0 = time.time()
         train_loss, train_acc = train_one_epoch(model, train_loader, optimizer, criterion, device)
-        val_loss, val_top1, val_top5 = evaluate(model, val_loader, criterion, device)
+        val_loss, val_top1, val_top5, val_cm = evaluate(
+            model, val_loader, criterion, device, args.num_classes
+        )
         lr = scheduler.get_last_lr()[0]
         scheduler.step()
         epoch_time = time.time() - epoch_t0
+
+        # Matrice de confusion de l'epoch : un PNG par epoch dans confusion_matrices/.
+        save_confusion(
+            val_cm,
+            cm_dir / f"epoch_{epoch:03d}.png",
+            title=f"Epoch {epoch} — val top1 {val_top1:.4f}",
+        )
 
         with open(history_path, "a", newline="") as f:
             csv.writer(f).writerow([
@@ -467,6 +508,12 @@ def main():
                     "epoch": epoch,
                 },
                 ckpt_path,
+            )
+            # Matrice du meilleur epoch en racine du run, écrasée à chaque amélioration.
+            save_confusion(
+                val_cm,
+                best_cm_path,
+                title=f"Best (epoch {epoch}) — val top1 {val_top1:.4f}",
             )
             print(f"  -> checkpoint sauvegardé ({ckpt_path}, val acc {val_top1:.4f})")
         else:
@@ -508,7 +555,7 @@ def main():
     # Rapport automatique : récap console + figures (curves, per_class, confusion)
     try:
         from report_run import generate_report
-        generate_report(run_dir)
+        generate_report(run_dir, archives_root=Path(args.archives))
     except Exception as e:
         print(f"(génération du rapport échouée: {type(e).__name__}: {e})")
 

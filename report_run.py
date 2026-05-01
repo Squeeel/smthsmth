@@ -31,12 +31,43 @@ import numpy as np
 # ------------------------------ Chargement ------------------------------
 
 
-def get_class_names(frames_root: Path) -> list[str] | None:
+def _build_names(pairs: list[tuple[int, str]]) -> list[str] | None:
+    if not pairs:
+        return None
+    pairs = sorted(set(pairs))
+    max_idx = pairs[-1][0]
+    out = [f"class_{i:02d}" for i in range(max_idx + 1)]
+    for i, name in pairs:
+        out[i] = name
+    return out
+
+
+def class_names_from_archives(archives_root: Path) -> list[str] | None:
     """
-    Construit la liste des noms de classes depuis frames/train/<NNN_NomClasse>/.
-    Retourne une liste indexée [0..max_idx] où les trous (ex. 027) restent
-    en placeholder "class_NN". Retourne None si le dossier n'existe pas.
+    Construit la liste des noms de classes depuis l'index du tar train :
+    chaque entrée est `<NNN_NomClasse>/<video>/<file>`.
+    Retourne None si l'index n'existe pas ou n'est pas exploitable.
     """
+    index_path = archives_root / "frames_train.tar.index.json"
+    if not index_path.exists():
+        return None
+    with open(index_path) as f:
+        index = json.load(f)
+    pairs: list[tuple[int, str]] = []
+    seen: set[str] = set()
+    for name in index:
+        cls, sep, _ = name.partition("/")
+        if not sep or cls in seen:
+            continue
+        seen.add(cls)
+        idx_str, _, label = cls.partition("_")
+        if idx_str.isdigit() and label:
+            pairs.append((int(idx_str), label))
+    return _build_names(pairs)
+
+
+def class_names_from_frames(frames_root: Path) -> list[str] | None:
+    """Idem, mais depuis frames/train/<NNN_NomClasse>/ sur le filesystem."""
     train_dir = frames_root / "train"
     if not train_dir.exists():
         return None
@@ -47,14 +78,25 @@ def get_class_names(frames_root: Path) -> list[str] | None:
         idx_str, _, name = d.name.partition("_")
         if idx_str.isdigit() and name:
             pairs.append((int(idx_str), name))
-    if not pairs:
-        return None
-    pairs.sort()
-    max_idx = pairs[-1][0]
-    out = [f"class_{i:02d}" for i in range(max_idx + 1)]
-    for i, name in pairs:
-        out[i] = name
-    return out
+    return _build_names(pairs)
+
+
+def get_class_names(
+    frames_root: Path | None = None,
+    archives_root: Path | None = None,
+) -> list[str] | None:
+    """
+    Résout les noms de classes en essayant d'abord les archives (source de
+    vérité au runtime), puis le filesystem `frames/`. Retourne None si rien
+    n'est exploitable — l'appelant tombera sur les indices numériques.
+    """
+    if archives_root is not None:
+        names = class_names_from_archives(archives_root)
+        if names is not None:
+            return names
+    if frames_root is not None:
+        return class_names_from_frames(frames_root)
+    return None
 
 
 def load_run(run_dir: Path) -> tuple[dict, list[dict], dict]:
@@ -222,7 +264,8 @@ def plot_per_class(per_class: list[dict], out_path: Path,
 
 
 def plot_confusion(cm: list[list[int]], out_path: Path,
-                   class_names: list[str] | None) -> None:
+                   class_names: list[str] | None,
+                   title: str | None = None) -> None:
     cm_arr = np.asarray(cm, dtype=float)
     n = cm_arr.shape[0]
     # On masque les classes sans aucun support (pas de ground-truth) — sinon
@@ -249,7 +292,9 @@ def plot_confusion(cm: list[list[int]], out_path: Path,
     ax.set_yticklabels(labels, fontsize=7)
     ax.set_xlabel("predicted")
     ax.set_ylabel("true")
-    ax.set_title(f"Matrice de confusion (normalisée par ligne, {n_v} classes)")
+    if title is None:
+        title = f"Matrice de confusion (normalisée par ligne, {n_v} classes)"
+    ax.set_title(title)
     plt.tight_layout()
     plt.savefig(out_path, dpi=120)
     plt.close()
@@ -259,6 +304,7 @@ def plot_confusion(cm: list[list[int]], out_path: Path,
 
 
 def generate_report(run_dir: Path, frames_root: Path = Path("frames"),
+                    archives_root: Path = Path("archives"),
                     verbose: bool = True) -> None:
     """
     Charge un run et produit son rapport : récap console + 3 figures PNG
@@ -271,7 +317,7 @@ def generate_report(run_dir: Path, frames_root: Path = Path("frames"),
         raise FileNotFoundError(f"pas un dossier de run valide : {run_dir}")
 
     config, history, summary = load_run(run_dir)
-    class_names = get_class_names(frames_root)
+    class_names = get_class_names(frames_root=frames_root, archives_root=archives_root)
 
     if verbose:
         print_recap(run_dir, config, history, summary, class_names)
@@ -304,12 +350,15 @@ def main() -> None:
     parser.add_argument("run_dir", help="Dossier d'un run (runs/<...>/)")
     parser.add_argument("--frames-root", default="frames",
                         help="Pour récupérer les noms de classes (défaut: frames).")
+    parser.add_argument("--archives", default="archives",
+                        help="Source alternative des noms de classes via l'index tar (défaut: archives).")
     args = parser.parse_args()
 
     run_dir = Path(args.run_dir).resolve()
     if not run_dir.exists():
         raise SystemExit(f"introuvable : {run_dir}")
-    generate_report(run_dir, frames_root=Path(args.frames_root))
+    generate_report(run_dir, frames_root=Path(args.frames_root),
+                    archives_root=Path(args.archives))
 
 
 if __name__ == "__main__":
