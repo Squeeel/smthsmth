@@ -1,0 +1,38 @@
+{
+  "args": {
+    "model": "CNN_rgb",
+    "archives": "archives",
+    "num_classes": 33,
+    "image_size": 112,
+    "batch_size": 64,
+    "epochs": 200,
+    "lr": 0.001,
+    "weight_decay": 0.0001,
+    "num_workers": 4,
+    "save_dir": "runs",
+    "patience": 10,
+    "min_delta": 0.0
+  },
+  "model": {
+    "name": "CNN_rgb",
+    "input_mode": "rgb_first",
+    "trainable_params": 1210369
+  },
+  "dataset": {
+    "train_size": 44993,
+    "val_size": 6745,
+    "image_size": 112,
+    "num_classes": 33
+  },
+  "system": {
+    "python": "3.12.13",
+    "platform": "Linux-5.14.0-611.49.1.el9_7.x86_64-x86_64-with-glibc2.34",
+    "torch": "2.11.0+cu130",
+    "cuda_available": true,
+    "cuda": "13.0",
+    "cudnn": 91900,
+    "gpu_name": "NVIDIA RTX 4000 Ada Generation",
+    "gpu_memory_gb": 20.97
+  },
+  "started_at": "2026-05-01T13:33:56"
+}
