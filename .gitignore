@@ -1,6 +1,4 @@
-archives
-frames
-optical_flow
+data
 __pycache__
 .claude
 

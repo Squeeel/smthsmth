@@ -129,8 +129,8 @@ def clean(frames_root: Path, flow_root: Path, apply: bool) -> None:
 
 def main() -> None:
     p = argparse.ArgumentParser()
-    p.add_argument("--frames-root", default="frames")
-    p.add_argument("--flow-root", default="optical_flow")
+    p.add_argument("--frames-root", default="data/frames")
+    p.add_argument("--flow-root", default="data/optical_flow")
     p.add_argument("--apply", action="store_true")
     args = p.parse_args()
     clean(Path(args.frames_root), Path(args.flow_root), apply=args.apply)

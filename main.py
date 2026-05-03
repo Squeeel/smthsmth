@@ -99,7 +99,7 @@ class SmthSmthDataset(Dataset):
 
     def __init__(
         self,
-        archives_root: str = "archives",
+        archives_root: str = "data/archives",
         split: str = "train",
         mode: str = "rgb_first",
         image_size: int = 112,
@@ -361,7 +361,7 @@ def main():
         help="Nom du fichier (sans .py) dans models_code/. "
              "Doit exposer INPUT_MODE et build(num_classes).",
     )
-    parser.add_argument("--archives", default="archives",
+    parser.add_argument("--archives", default="data/archives",
                         help="Dossier contenant frames_{split}.tar / flow_{split}.tar et leurs .index.json")
     parser.add_argument("--num-classes", type=int, default=33)
     parser.add_argument("--image-size", type=int, default=112)
@@ -415,24 +415,32 @@ def main():
 
     # Pour le rendu des matrices de confusion par epoch. Si matplotlib / les
     # noms de classes ne sont pas dispos, on tombe en silence sur les indices
-    # numériques et on ne plante pas l'entraînement.
+    # numériques et on ne plante pas l'entraînement. Le CSV est écrit même si
+    # le PNG plante (utile pour analyse offline / reprise sur autre machine).
     try:
-        from report_run import plot_confusion, get_class_names
+        from report_run import plot_confusion, save_confusion_csv, get_class_names
         class_names = get_class_names(
-            frames_root=Path("frames"), archives_root=Path(args.archives)
+            frames_root=Path("data/frames"), archives_root=Path(args.archives)
         )
     except Exception as e:
         print(f"(plot CM désactivé : {type(e).__name__}: {e})")
         plot_confusion = None
+        save_confusion_csv = None
         class_names = None
 
     def save_confusion(cm, out_path, title):
-        if plot_confusion is None:
-            return
-        try:
-            plot_confusion(cm, out_path, class_names, title=title)
-        except Exception as e:
-            print(f"(plot CM échoué pour {out_path.name}: {type(e).__name__}: {e})")
+        """`out_path` est un chemin .png ; on écrit aussi le .csv adjacent."""
+        if plot_confusion is not None:
+            try:
+                plot_confusion(cm, out_path, class_names, title=title)
+            except Exception as e:
+                print(f"(plot CM échoué pour {out_path.name}: {type(e).__name__}: {e})")
+        if save_confusion_csv is not None:
+            csv_path = out_path.with_suffix(".csv")
+            try:
+                save_confusion_csv(cm, csv_path, class_names)
+            except Exception as e:
+                print(f"(CSV CM échoué pour {csv_path.name}: {type(e).__name__}: {e})")
 
     config = {
         "args": vars(args),

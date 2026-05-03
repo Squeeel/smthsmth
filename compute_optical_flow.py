@@ -73,8 +73,8 @@ def process_video_folder(task: tuple) -> str | None:
 
 def main():
     parser = argparse.ArgumentParser(description="Compute TVL1 optical flow over a frames dataset.")
-    parser.add_argument("--input", default="frames", help="Root directory of input frames")
-    parser.add_argument("--output", default="optical_flow", help="Root directory for flow outputs (mirrors input layout)")
+    parser.add_argument("--input", default="data/frames", help="Root directory of input frames")
+    parser.add_argument("--output", default="data/optical_flow", help="Root directory for flow outputs (mirrors input layout)")
     parser.add_argument("--workers", type=int, default=4, help="Number of parallel workers")
     args = parser.parse_args()
 

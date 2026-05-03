@@ -1,0 +1,11 @@
+Je veux qu'on puisse voir l'accuracy par classe dans la validation dans une matrice, garde la matrice du meilleur tour dans le fichier du run mais rajoute
+ un dossier où tu conserves toutes les matrices.
+
+
+Il faut implémenter un TRM 
+
+
+Rajouter la dataaugmentation enlever le mouvement médian
+
+
+Enlever les images qui sont des faux positif et où il ne se passe rien

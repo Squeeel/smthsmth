@@ -300,11 +300,38 @@ def plot_confusion(cm: list[list[int]], out_path: Path,
     plt.close()
 
 
+def save_confusion_csv(cm: list[list[int]], out_path: Path,
+                       class_names: list[str] | None) -> None:
+    """
+    Sauve la matrice de confusion brute (counts entiers, non normalisés) en CSV.
+
+    Format :
+        - 1ère ligne : en-tête, ""  puis  N noms de classes prédites
+        - lignes suivantes : nom de classe vraie + N counts
+
+    Pas de masquage des classes à support nul : on conserve la matrice complète
+    pour que tout post-traitement (pandas, Excel) parte de la vérité brute.
+    """
+    cm_arr = np.asarray(cm, dtype=int)
+    n = cm_arr.shape[0]
+    labels = [
+        f"{i:02d} {short_class_name(i, class_names)}"
+        for i in range(n)
+    ]
+
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(out_path, "w", newline="") as f:
+        w = csv.writer(f)
+        w.writerow(["true \\ pred", *labels])
+        for i in range(n):
+            w.writerow([labels[i], *cm_arr[i].tolist()])
+
+
 # ------------------------------ Entrée publique ------------------------------
 
 
-def generate_report(run_dir: Path, frames_root: Path = Path("frames"),
-                    archives_root: Path = Path("archives"),
+def generate_report(run_dir: Path, frames_root: Path = Path("data/frames"),
+                    archives_root: Path = Path("data/archives"),
                     verbose: bool = True) -> None:
     """
     Charge un run et produit son rapport : récap console + 3 figures PNG
@@ -335,6 +362,9 @@ def generate_report(run_dir: Path, frames_root: Path = Path("frames"),
         out = run_dir / "report_confusion.png"
         plot_confusion(summary["confusion_matrix"], out, class_names)
         figs.append(out)
+        out_csv = run_dir / "report_confusion.csv"
+        save_confusion_csv(summary["confusion_matrix"], out_csv, class_names)
+        figs.append(out_csv)
 
     if verbose and figs:
         print("\nFigures :")
@@ -348,10 +378,10 @@ def generate_report(run_dir: Path, frames_root: Path = Path("frames"),
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("run_dir", help="Dossier d'un run (runs/<...>/)")
-    parser.add_argument("--frames-root", default="frames",
-                        help="Pour récupérer les noms de classes (défaut: frames).")
-    parser.add_argument("--archives", default="archives",
-                        help="Source alternative des noms de classes via l'index tar (défaut: archives).")
+    parser.add_argument("--frames-root", default="data/frames",
+                        help="Pour récupérer les noms de classes (défaut: data/frames).")
+    parser.add_argument("--archives", default="data/archives",
+                        help="Source alternative des noms de classes via l'index tar (défaut: data/archives).")
     args = parser.parse_args()
 
     run_dir = Path(args.run_dir).resolve()

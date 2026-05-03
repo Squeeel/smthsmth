@@ -54,9 +54,9 @@ def pack_split(src_root: Path, out_tar: Path) -> dict[str, list[int]]:
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--frames-root", default="frames")
-    parser.add_argument("--flow-root", default="optical_flow")
-    parser.add_argument("--out", default="archives")
+    parser.add_argument("--frames-root", default="data/frames")
+    parser.add_argument("--flow-root", default="data/optical_flow")
+    parser.add_argument("--out", default="data/archives")
     parser.add_argument("--splits", nargs="+", default=["train", "val", "test"])
     args = parser.parse_args()
 

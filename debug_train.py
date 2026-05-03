@@ -23,7 +23,7 @@ BATCH_SIZE = 2
 N_TRAIN_BATCHES = 2
 N_VAL_BATCHES = 1
 NUM_WORKERS = 0           # 0 = plus simple à debugger
-ARCHIVES_ROOT = "archives"
+ARCHIVES_ROOT = "data/archives"
 
 
 def smoke_test(model_name: str, device: torch.device) -> bool:

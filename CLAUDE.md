@@ -9,8 +9,8 @@ faire semblant de…, etc.).
 
 Chaque vidéo est représentée sous deux modalités complémentaires :
 
-- **frames/** — images RGB extraites de la vidéo (apparence)
-- **optical_flow/** — flux optique TVL1 entre frames consécutives (mouvement)
+- **data/frames/** — images RGB extraites de la vidéo (apparence)
+- **data/optical_flow/** — flux optique TVL1 entre frames consécutives (mouvement)
 
 L'idée pédagogique typique de ce setup : entraîner un modèle **two-stream**
 (une branche RGB, une branche flux), ou un 3D-CNN, et comparer.
@@ -42,57 +42,72 @@ et non 33. Pour la sortie d'un classifieur on remappera vers `[0..31]`.
 
 ## Arborescence
 
+Toutes les *données* (jamais commitées — `data/` est gitignoré) vivent sous
+`data/`. Tout le *code* reste à la racine ou dans des sous-dossiers thématiques
+(`models_code/`, `data_augmentation/`).
+
 ```
 smthsmth/
-├── frames/
-│   ├── train/   ← 32 dossiers de classe, 44 992 vidéos au total
-│   │   └── 000_Closing_something/
-│   │       └── video_10061/
-│   │           ├── frame_000.jpg
-│   │           ├── frame_001.jpg
-│   │           ├── frame_002.jpg
-│   │           └── frame_003.jpg
-│   ├── val/     ← 32 dossiers de classe, 6 740 vidéos
-│   └── test/    ← PAS de dossier de classe — 6 909 vidéos "à plat"
-│       └── video_1000/   (frames brutes, label inconnu = à prédire)
+├── data/                         ← TOUTES les données (gitignoré)
+│   ├── frames/
+│   │   ├── train/                ← 32 dossiers de classe, 44 992 vidéos au total
+│   │   │   └── 000_Closing_something/
+│   │   │       └── video_10061/
+│   │   │           ├── frame_000.jpg
+│   │   │           ├── frame_001.jpg
+│   │   │           ├── frame_002.jpg
+│   │   │           └── frame_003.jpg
+│   │   ├── val/                  ← 32 dossiers de classe, 6 740 vidéos
+│   │   └── test/                 ← PAS de dossier de classe — 6 909 vidéos "à plat"
+│   │       └── video_1000/       (frames brutes, label inconnu = à prédire)
+│   │
+│   ├── optical_flow/             (mêmes splits, mêmes vidéos, structure miroir)
+│   │   └── train/000_Closing_something/video_10061/
+│   │       ├── flow_x_000.jpg   ┐
+│   │       ├── flow_y_000.jpg   │  paire (frame_000 → frame_001)
+│   │       ├── flow_x_001.jpg   ┐
+│   │       ├── flow_y_001.jpg   │  paire (frame_001 → frame_002)
+│   │       ├── flow_x_002.jpg   ┐
+│   │       └── flow_y_002.jpg   │  paire (frame_002 → frame_003)
+│   │
+│   ├── archives/                 ← format de travail réel (voir section dédiée)
+│   │   ├── frames_train.tar      + frames_train.tar.index.json
+│   │   ├── frames_val.tar        + frames_val.tar.index.json
+│   │   ├── frames_test.tar       + frames_test.tar.index.json
+│   │   ├── flow_train.tar        + flow_train.tar.index.json
+│   │   ├── flow_val.tar          + flow_val.tar.index.json
+│   │   ├── flow_test.tar         + flow_test.tar.index.json
+│   │   ├── frames_train_aug.tar  + frames_train_aug.tar.index.json   (si augmentation)
+│   │   └── flow_train_aug.tar    + flow_train_aug.tar.index.json     (si augmentation)
+│   │
+│   ├── frames_augmented/         ← sortie de data_augmentation/ (optionnel)
+│   ├── optical_flow_augmented/   ← sortie de data_augmentation/ (optionnel)
+│   └── frame_new/                ← drop-zone pour nouvelles vidéos (cf. update_dataset.py)
 │
-├── optical_flow/   (mêmes splits, mêmes vidéos, structure miroir)
-│   └── train/000_Closing_something/video_10061/
-│       ├── flow_x_000.jpg   ┐
-│       ├── flow_y_000.jpg   │  paire (frame_000 → frame_001)
-│       ├── flow_x_001.jpg   ┐
-│       ├── flow_y_001.jpg   │  paire (frame_001 → frame_002)
-│       ├── flow_x_002.jpg   ┐
-│       └── flow_y_002.jpg   │  paire (frame_002 → frame_003)
-│
-├── archives/                 ← format de travail réel (voir section dédiée)
-│   ├── frames_train.tar  + frames_train.tar.index.json
-│   ├── frames_val.tar    + frames_val.tar.index.json
-│   ├── frames_test.tar   + frames_test.tar.index.json
-│   ├── flow_train.tar    + flow_train.tar.index.json
-│   ├── flow_val.tar      + flow_val.tar.index.json
-│   └── flow_test.tar     + flow_test.tar.index.json
-│
-├── compute_optical_flow.py   ← génère optical_flow/ depuis frames/
-├── pack_dataset.py           ← empaquette frames/ + optical_flow/ → archives/
-├── clean_dataset.py          ← purge la pollution flow et les vidéos incomplètes
-├── main.py                   ← entraînement, lit UNIQUEMENT archives/
-├── debug_train.py            ← smoke-test pour tous les modèles de models_code/
-├── report_run.py             ← récap d'un run (texte + 3 figures PNG)
-├── models_code/              ← un fichier = un modèle (cf. section dédiée)
-│   ├── CNN_rgb.py            ← baseline 2D, première frame uniquement
-│   ├── CNN_flow.py           ← baseline 2D, 6 cartes flow empilées
-│   ├── CNN_two_stream.py     ← two-stream CNN partagé, fusion concat features
-│   ├── TSM_two_stream.py     ← Temporal Shift Module sur les deux modalités
-│   └── R2plus1D_two_stream.py← (2+1)D : conv spatiale puis temporelle séparées
+├── compute_optical_flow.py       ← génère data/optical_flow/ depuis data/frames/
+├── pack_dataset.py               ← empaquette data/frames/ + data/optical_flow/ → data/archives/
+├── clean_dataset.py              ← purge la pollution flow et les vidéos incomplètes
+├── update_dataset.py             ← intègre data/frame_new/ dans data/frames/ (+ flux)
+├── main.py                       ← entraînement, lit UNIQUEMENT data/archives/
+├── debug_train.py                ← smoke-test pour tous les modèles de models_code/
+├── report_run.py                 ← récap d'un run (texte + 3 figures PNG)
+├── data_augmentation/            ← augmentation hors-ligne (voir section dédiée)
+│   ├── video_augment.py          ← VideoAugment : crop+rotation partagés RGB/flow
+│   └── augment_dataset.py        ← génère data/{frames,optical_flow}_augmented/ + tars
+├── models_code/                  ← un fichier = un modèle (cf. section dédiée)
+│   ├── CNN_rgb.py                ← baseline 2D, première frame uniquement
+│   ├── CNN_flow.py               ← baseline 2D, 6 cartes flow empilées
+│   ├── CNN_two_stream.py         ← two-stream CNN partagé, fusion concat features
+│   ├── TSM_two_stream.py         ← Temporal Shift Module sur les deux modalités
+│   └── R2plus1D_two_stream.py    ← (2+1)D : conv spatiale puis temporelle séparées
 ├── requirements.txt
-├── runs/                     ← un sous-dossier par entraînement (jamais écrasé)
+├── runs/                         ← un sous-dossier par entraînement (jamais écrasé)
 │   └── <model>_<YYYYMMDD-HHMMSS>/
-│       ├── config.json       (args, sysinfo, git, nb params, taille dataset)
-│       ├── history.csv       (1 ligne par epoch : losses, top1, top5, lr, durée)
-│       ├── summary.json      (best/final acc, durée totale, per-class, conf. matrix)
-│       ├── best.pth          (state_dict + args + epoch + val_acc)
-│       └── report_*.png      (curves, per_class, confusion — générés en fin de run)
+│       ├── config.json           (args, sysinfo, git, nb params, taille dataset)
+│       ├── history.csv           (1 ligne par epoch : losses, top1, top5, lr, durée)
+│       ├── summary.json          (best/final acc, durée totale, per-class, conf. matrix)
+│       ├── best.pth              (state_dict + args + epoch + val_acc)
+│       └── report_*.png          (curves, per_class, confusion — générés en fin de run)
 └── .venv/
 ```
 
@@ -100,9 +115,9 @@ smthsmth/
 
 - **4 frames par vidéo** (frame_000 à frame_003) → 3 paires de flux par vidéo
   (flow_x/flow_y indices 000, 001, 002).
-- **Split test sans labels** : les vidéos sont à la racine de `test/` (pas de
-  dossier de classe). C'est le set d'évaluation finale — il faudra produire
-  un fichier de prédictions (`video_id, predicted_class`).
+- **Split test sans labels** : les vidéos sont à la racine de `data/frames/test/`
+  (pas de dossier de classe). C'est le set d'évaluation finale — il faudra
+  produire un fichier de prédictions (`video_id, predicted_class`).
 - **train/val ont la structure label/** : facile pour `ImageFolder`-like ou
   un `Dataset` PyTorch custom.
 - **Tailles** (post-cleanup, cf. `clean_dataset.py`) :
@@ -119,13 +134,13 @@ smthsmth/
   en float, **clip à [-20, 20]**, puis normalise à uint8 [0, 255] et écrit en
   JPG.
 - Multi-process via `ProcessPoolExecutor` (param `--workers`, défaut 4).
-- Re-exécutable : reproduit la structure `frames/{split}/{class}/{video}/`
-  sous `optical_flow/`.
-- Déjà exécuté — `optical_flow/` est rempli.
+- Re-exécutable : reproduit la structure `data/frames/{split}/{class}/{video}/`
+  sous `data/optical_flow/`.
+- Déjà exécuté — `data/optical_flow/` est rempli.
 
 ## Archives tar — format de travail réel
 
-`frames/` et `optical_flow/` représentent ~**587 000 petits fichiers JPG**
+`data/frames/` et `data/optical_flow/` représentent ~**587 000 petits fichiers JPG**
 (235k frames + 352k flows) pour ~5,8 Go. Cette explosion en nombre de fichiers
 rend les transferts (rsync/scp) et certaines I/O très lentes. On empaquette donc
 le dataset en **6 archives tar non compressées** — c'est le format que main.py
@@ -137,8 +152,8 @@ par le pipeline d'entraînement.**
 Pour chaque (split, modalité), un tar + un index JSON :
 
 ```
-archives/frames_train.tar              archives/frames_train.tar.index.json
-archives/flow_train.tar                archives/flow_train.tar.index.json
+data/archives/frames_train.tar     data/archives/frames_train.tar.index.json
+data/archives/flow_train.tar       data/archives/flow_train.tar.index.json
 ... (idem val, test)
 ```
 
@@ -155,7 +170,7 @@ archives/flow_train.tar                archives/flow_train.tar.index.json
 
 ```bash
 uv run pack_dataset.py
-# Options : --frames-root frames --flow-root optical_flow --out archives
+# Options : --frames-root data/frames --flow-root data/optical_flow --out data/archives
 #           --splits train val test
 ```
 
@@ -173,7 +188,7 @@ après le fork (pas de seek partagé entre processus). `__getstate__` strip le f
 pour le mode "spawn".
 
 `SmthSmthDataset` :
-- `__init__(archives_root="archives", split, mode, image_size)` — ne reçoit
+- `__init__(archives_root="data/archives", split, mode, image_size)` — ne reçoit
   plus de `frames_root` / `flow_root`.
 - Construit la liste `samples = [(video_arcname, class_idx), …]` en parsant les
   clés de l'index frames (pas le filesystem).
@@ -183,8 +198,8 @@ pour le mode "spawn".
 ### CLI
 
 ```bash
-uv run main.py --model CNN --archives archives
-uv run debug_train.py     # ARCHIVES_ROOT="archives" en constante
+uv run main.py --model CNN --archives data/archives
+uv run debug_train.py     # ARCHIVES_ROOT="data/archives" en constante
 ```
 
 `main.py` n'a plus `--frames-root` / `--flow-root`, juste `--archives`.
@@ -192,18 +207,69 @@ uv run debug_train.py     # ARCHIVES_ROOT="archives" en constante
 ### Workflow de transfert
 
 ```bash
-uv run pack_dataset.py                          # local : ~5-10 min
-rsync -P archives/ user@autremachine:/path/     # 12 fichiers au lieu de 587k
-uv run main.py --model CNN_rgb                  # idem sur les deux machines
+uv run pack_dataset.py                              # local : ~5-10 min
+rsync -P data/archives/ user@autremachine:/path/    # 12 fichiers au lieu de 587k
+uv run main.py --model CNN_rgb                      # idem sur les deux machines
 ```
+
+## Augmentation hors-ligne (`data_augmentation/`)
+
+Tout le code lié à l'augmentation est isolé dans `data_augmentation/` :
+
+- **`video_augment.py`** — classe `VideoAugment` : crop aléatoire + petite
+  rotation, **partagés entre toutes les frames RGB et toutes les cartes flow
+  d'une même vidéo**. Une instance = une vidéo : `sample()` tire les
+  paramètres une fois, `apply()` les ré-applique à chaque image. Sans ça, la
+  cohérence temporelle (et donc le signal de mouvement) est détruite.
+  Volontairement absent du jeu d'augmentations : flip horizontal/vertical
+  (échangerait des classes : 018↔019, 008↔009) et reverse temporel (échangerait
+  open↔close, fold↔unfold). Pour le flow, `fill=128` à la rotation préserve la
+  convention "vélocité nulle" sur les pixels créés aux coins.
+
+- **`augment_dataset.py`** — pipeline hors-ligne. Pour chaque vidéo (par
+  défaut split `train`), instancie un `VideoAugment`, sample, applique aux
+  4 frames RGB + 6 cartes flow, écrit en miroir sous
+  `data/frames_augmented/<split>/<class>/<video>_aug{n}/` et
+  `data/optical_flow_augmented/<split>/<class>/<video>_aug{n}/`. Suffixe
+  `_aug{n}` systématique → pas de collision si on fusionne avec les
+  archives originales. Empaquette ensuite via `pack_dataset.pack_split` →
+  `data/archives/frames_{split}_aug.tar` + `data/archives/flow_{split}_aug.tar`
+  (+ leurs `.index.json`).
+
+```bash
+uv run data_augmentation/augment_dataset.py                       # train, 1 copie
+uv run data_augmentation/augment_dataset.py --copies 2 --workers 8
+uv run data_augmentation/augment_dataset.py --no-pack             # juste les images
+uv run data_augmentation/augment_dataset.py --seed 42             # reproductible
+```
+
+Chemins par défaut résolus depuis la racine du projet (pas le CWD) — le script
+marche depuis n'importe où. `pack_dataset` (à la racine) est importé via
+ajout de `PROJECT_ROOT` dans `sys.path`.
+
+## Mise à jour incrémentale (`update_dataset.py`)
+
+Si on reçoit de nouvelles vidéos, on les dépose sous `data/frame_new/` puis :
+
+```bash
+uv run update_dataset.py            # dry-run : montre ce qui serait fait
+uv run update_dataset.py --apply    # copie + calcule le flux pour les nouvelles uniquement
+uv run pack_dataset.py              # re-pack les archives
+```
+
+Compare `data/frame_new/` à `data/frames/`, sanity-check les vidéos communes,
+copie uniquement les *nouvelles*, calcule le flux TVL1 pour celles-ci en
+réutilisant `process_video_folder` de `compute_optical_flow.py`. Ne supprime
+jamais. Voir le docstring du fichier pour les options (`--md5`, `--workers`,
+`--skip-sanity`).
 
 ## Nettoyage (`clean_dataset.py`)
 
 Les sources avaient deux pathologies, désormais purgées :
 
 1. **Pollution flow dans frames/** : `compute_optical_flow.py` a écrit certains
-   `flow_*.jpg` directement dans `frames/test/<video>/`. 274 fichiers concernés,
-   tous bit-exact identiques aux versions correctes côté `optical_flow/` →
+   `flow_*.jpg` directement dans `data/frames/test/<video>/`. 274 fichiers concernés,
+   tous bit-exact identiques aux versions correctes côté `data/optical_flow/` →
    suppression sûre.
 2. **Vidéos nativement incomplètes** : 11 vidéos sources cassées (pas leurs
    4 frames complètes) → suppression du dossier des deux côtés. Invariant
@@ -269,8 +335,8 @@ uv run report_run.py runs/<dir> --frames-root /chemin/vers/frames
 ```
 
 Les noms de classes pour les figures sont récupérés depuis
-`frames/train/<NNN_NomClasse>/`. Si `frames/` n'est pas accessible, fallback en
-labels numériques `class_NN`.
+`data/frames/train/<NNN_NomClasse>/`. Si `data/frames/` n'est pas accessible,
+fallback en labels numériques `class_NN`.
 
 ## Stack technique
 
@@ -295,26 +361,35 @@ D'après `requirements.txt` :
    dossiers triés (l'index 27 saute, donc `idx=27` correspondra au dossier
    `028_…`).
 4. **Sortie test** : prédire pour chaque vidéo du split `test`
-   (lu depuis `archives/frames_test.tar`) → CSV / JSON
+   (lu depuis `data/archives/frames_test.tar`) → CSV / JSON
    `video_id,class_id` (ou nom de classe).
 5. **Optuna** : search sur lr, taille de batch, dropout, poids de fusion
    RGB/flow.
 
 ## Conventions / pièges à retenir
 
+- **Toutes les données sont sous `data/`** (gitignoré). Code = racine ou
+  sous-dossiers (`models_code/`, `data_augmentation/`). Chemins par défaut des
+  scripts pointent sur `data/<sous-dossier>` ; pour `data_augmentation/`, ils
+  sont résolus relativement à la racine du projet, pas au CWD.
 - Ne pas supposer 33 classes : il y en a **32** (027 manquant).
   Les modèles sortent actuellement **33 logits** (`--num-classes=33` par défaut
   dans `main.py`) — ce n'est pas un bug, l'utilisateur ajoutera plus tard le
   dossier de la classe 027 manquante. En attendant, l'index 27 n'apparaît
   jamais comme cible donc cette sortie reste simplement inutilisée.
-- `test/` n'a pas de labels — toute évaluation pendant le dev se fait sur
-  `val/`.
+- `data/frames/test/` n'a pas de labels — toute évaluation pendant le dev se
+  fait sur `val/`.
 - Les 4 frames sont déjà sous-échantillonnées de la vidéo originale ; le
   modèle doit donc gérer une représentation temporelle très courte.
 - Les flux JPG perdent un peu de précision (compression) — c'est volontaire
   et standard, mais ne pas re-clipper à la lecture.
-- **Source de vérité au runtime = `archives/`**, pas `frames/` / `optical_flow/`.
-  Les dossiers d'origine ne servent plus qu'à régénérer les tars via
-  `pack_dataset.py`. Si tu modifies les frames/flows, repacke ensuite.
+- **Source de vérité au runtime = `data/archives/`**, pas `data/frames/` /
+  `data/optical_flow/`. Les dossiers d'origine ne servent plus qu'à régénérer
+  les tars via `pack_dataset.py`. Si tu modifies les frames/flows, repacke
+  ensuite.
 - Si `pack_dataset.py` est ré-exécuté, il **écrase** les tars existants — pas
   d'append incrémental.
+- L'augmentation hors-ligne produit des tars *séparés*
+  (`{frames,flow}_train_aug.tar`) : ils ne remplacent pas les originaux,
+  ils s'y ajoutent. À combiner côté Dataset si on veut entraîner sur
+  original + augmenté.
